@@ -35,3 +35,6 @@ This code helps to detect the lag in a Metroid Prime Hunters match by indicating
 - Magmaul や溶岩による火傷のような **小さなダメージは無視** されます  
 - **Shock Coil のダメージは無視されません**  
 - 敵がダブルダメージ状態のとき、**プレイヤーは受けたダメージの半分を回復** します
+
+## 🗨️ Join our MPH Community Discord
+https://discord.gg/x4jV4ddvv9
