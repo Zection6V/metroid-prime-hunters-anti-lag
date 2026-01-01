@@ -1,0 +1,332 @@
+import shutil, subprocess, struct
+from pathlib import Path
+
+workdir = Path("/mnt/data/anti_lag_autobase_clang")
+workdir.mkdir(parents=True, exist_ok=True)
+
+asm = r"""
+/*************
+Metroid Prime Hunters Anti Lag Code
+Impementation by Dalle
+
+Addresses
+playerId = base
+HP           = base + 0xB36
+DD Duration  = base + 0xF0C
+Coil Strength= base + 0xE98
+
+EU1.0 Base = 0x020DA558
+EU1.1 Base = 0x020DA5D8
+JP1.0 Base = 0x020DBB78
+JP1.1 Base = 0x020DBB38
+US1.0 Base = 0x020D9CB8
+US1.1 Base = 0x020DA538
+KR1.0 Base = 0x020D33A9
+  KRのベースは他のバージョンに比べて0x1進んだ位置にあるため、
+  HP/DD/Coil 等の相対位置計算に限り -0x1 を適用する。
+*******/
+
+/*********
+@starting main program, setting up custom stack preserving registers.
+************/
+
+.long 0xE2000000
+.long ReferenceLabel-8
+ldr r0, CustomStack
+stmdb r0!, {r1-r11, lr}
+
+/*********************
+MAIN PROGRAM
+*********************/
+
+main:
+    /* ベース自動判定: baseAddressP (playerId用) と baseAddressE (計算用: KRのみ-1) を設定する */
+    mov r3, #0
+    ldr r4, euBase10
+    bl checkBasicAddressEx
+    mov r3, #0
+    ldr r4, euBase11
+    bl checkBasicAddressEx
+
+    mov r3, #0
+    ldr r4, usBase10
+    bl checkBasicAddressEx
+    mov r3, #0
+    ldr r4, usBase11
+    bl checkBasicAddressEx
+
+    mov r3, #0
+    ldr r4, jpBase10
+    bl checkBasicAddressEx
+    mov r3, #0
+    ldr r4, jpBase11
+    bl checkBasicAddressEx
+
+    /* KR: 計算用ベースだけ -1 */
+    mov r3, #1
+    ldr r4, krBase10
+    bl checkBasicAddressEx
+
+    /* setup offset */
+    ldr r8, playerOffset        @ r8 = player offset (per-player struct stride)
+
+    ldr r7, baseAddressP         @ r7 = base address (playerId用)
+    ldr r9, baseAddressE         @ r9 = base address (HP/DD/Coil等の計算用; KRのみ-1)
+
+    ldr r11, [r7]                @ r11 = player number
+    mul r10, r8, r11
+    add r10,  r10, r9            @ r10 = effective base + player number * offset
+
+loadHP:
+    /* load current hp and temp hp */
+    ldr r1, hpOffset
+    add r1, r10, r1
+    ldrh r5, [r1]                @ r5 = currentHp
+    ldrh r4, tempHP              @ r4 = tmpHp (PC相対で保持)
+
+checkSC:
+    ldr r1, scStrengthOffset
+    add r1, r1, r9               @ coil strength base (effective)
+    mov r0, #0
+SCLoop:
+    cmp r0, r11
+    beq skipSCLoop
+    ldr r2, [r1]
+    cmp r2, #0
+    bgt applyEffect
+skipSCLoop:
+    add r1, r1, r8
+    add r0, r0, #1
+    cmp r0, #4
+    blt SCLoop
+
+compareHP:
+    /* currentHp < tmpHp ? */
+    cmp r5, r4
+    bge end
+
+checkThreshold:
+    /* skip if dmg is <= threshold */
+    ldr r2, threshold
+    sub r1, r4, r5
+    cmp r1, r2
+    ble end
+
+applyEffect:
+    ldr r1, ddDurationOffset
+    add r1, r1, r10
+    ldr r2, ddDurarion
+    strh r2, [r1]
+
+restoreHP:
+    cmp r5, #0
+    beq end
+
+    ldr r1, ddDurationOffset
+    add r1, r1, r9
+    mov r0, #0
+hpRestoreLoop:
+    cmp r0, r11
+    beq skipHpRestoreLoop
+    ldr r2, [r1]
+    cmp r2, #0
+    bgt doHpRestore
+skipHpRestoreLoop:
+    add r1, r1, r8
+    add r0, r0, #1
+    cmp r0, #4
+    blt hpRestoreLoop
+    b end
+
+doHpRestore:
+    sub r1, r4, r5              @ temphp-currenthp
+    add r0, r5, r1, lsr #1
+    ldr r1, hpOffset
+    add r1, r1, r10
+    strh r0, [r1]
+
+end:
+    strh r5, tempHP              @ tempHP = currentHp
+
+/******************
+VARIABLES FOR MAIN PROGRAM
+*******************/
+
+@ Offset Constants
+hpOffset:
+    .long 0xB36
+ddDurationOffset:
+    .long 0xF0C
+scStrengthOffset:
+    .long 0xE98
+
+@ Other Constants
+ddDurarion:
+    .long 0xA
+playerOffset:
+    .long 0xF30
+threshold:
+    .long 0x5
+
+@ Variables
+tempHP:
+    .long 0x0
+
+/***********
+Returning from Main Program
+***********/
+ReturnFromProgram:
+    ldr r0, CustomStack
+    sub r0, r0, #0x30
+    ldmia r0!, {r1-r11, lr}
+    mov r0, #0x5
+    ldr r12, Return
+    bx r12
+
+Return:
+    .long 0x37FBB2C
+
+/***************
+CUSTOM FUNCTIONS
+***************/
+
+/*
+@ r4 = candidate base address (playerId用のベース)
+@ r3 = adjust (0:通常 / 1:KRのため計算用ベースだけ -1)
+*/
+checkBasicAddressEx:
+    /* すでに確定しているなら何もしない */
+    ldr r2, baseAddressP
+    cmp r2, #0
+    bne checkBasicAddressEnd
+
+    /* test address = (r4 - r3) + hpOffset */
+    sub r12, r4, r3
+    ldr r0, hpOffset
+    add r1, r0, r12
+    ldrh r0, [r1]
+    cmp r0, #99
+    bne checkBasicAddressEnd
+
+    /* 確定: playerId用ベースと、計算用ベース(必要なら-1)を保存 */
+    streq r4, baseAddressP
+    streq r12, baseAddressE
+
+checkBasicAddressEnd:
+    bx lr
+
+/***************
+VERSION BASE CANDIDATES
+***************/
+
+euBase10:
+    .long 0x020DA558
+euBase11:
+    .long 0x020DA5D8
+
+jpBase10:
+    .long 0x020DBB78
+jpBase11:
+    .long 0x020DBB38
+
+usBase10:
+    .long 0x020D9CB8
+usBase11:
+    .long 0x020DA538
+
+krBase10:
+    .long 0x020D33A9
+
+/***************
+STATE (RUNTIME-WRITABLE)
+***************/
+baseAddressP:
+    .long 0x0              @ playerId読み取り用のベース
+baseAddressE:
+    .long 0x0              @ HP/DD/Coil等の計算用ベース (KRのみ baseAddressP-1)
+
+/***************
+Cleaning rest up and terminating program
+*****************/
+CustomStack:
+    .long CustomStack+0x200002C
+
+    /* 元コードの ".org CustomStack+0x34" 相当: CustomStack先頭から合計0x34バイト確保 */
+    .space 0x30, 0x00
+
+EndofProgram:
+    /* 元コードの ".org (EndofProgram+4)&0xFFFFFFF8" をclang互換で再現 */
+    .balign 8, 0x00
+
+ReferenceLabel:
+    .long 0x037FBACC
+    mov pc, #0x2000000
+""".lstrip()
+
+asm_path = workdir / "anti_lag_autobase_clang.s"
+asm_path.write_text(asm, encoding="utf-8")
+
+clang = shutil.which("clang")
+objcopy = shutil.which("llvm-objcopy") or shutil.which("objcopy")
+assert clang and objcopy
+
+o_path = workdir / "anti_lag_autobase_clang.o"
+bin_path = workdir / "anti_lag_autobase_clang.bin"
+
+def run(cmd):
+    return subprocess.run(cmd, cwd=workdir, capture_output=True, text=True)
+
+r1 = run([
+    clang, "-c", "-x", "assembler",
+    "--target=armv5te-none-eabi",
+    "-mcpu=arm946e-s",
+    "-marm",
+    "-o", str(o_path),
+    str(asm_path),
+])
+
+print("=== clang assemble ===")
+print("rc:", r1.returncode)
+if r1.stdout: print(r1.stdout)
+if r1.stderr: print(r1.stderr)
+if r1.returncode != 0:
+    raise SystemExit("assemble failed")
+
+r2 = run([objcopy, "-O", "binary", str(o_path), str(bin_path)])
+print("\n=== objcopy ===")
+print("rc:", r2.returncode)
+if r2.stdout: print(r2.stdout)
+if r2.stderr: print(r2.stderr)
+if r2.returncode != 0:
+    raise SystemExit("objcopy failed")
+
+data = bin_path.read_bytes()
+pad = (-len(data)) % 8
+data_padded = data + (b"\x00" * pad)
+
+ar_lines = []
+for i in range(0, len(data_padded), 8):
+    w1 = struct.unpack_from("<I", data_padded, i)[0]
+    w2 = struct.unpack_from("<I", data_padded, i + 4)[0]
+    ar_lines.append(f"{w1:08X} {w2:08X}")
+
+ar_path = workdir / "anti_lag_autobase_clang_ar.txt"
+ar_path.write_text("\n".join(ar_lines) + "\n", encoding="utf-8")
+
+info = workdir / "BUILD_INFO.txt"
+info.write_text(
+    "\n".join([
+        "clang build OK (EU/US/JP 1.0/1.1 + KR1.0 auto base detection)",
+        f"bin bytes: {len(data)} (pad {pad})",
+        f"AR lines: {len(ar_lines)}",
+        "",
+        "clang cmd:",
+        " ".join(map(str, r1.args)),
+        "objcopy cmd:",
+        " ".join(map(str, r2.args)),
+    ]) + "\n",
+    encoding="utf-8"
+)
+print("\n=== summary ===")
+print(info.read_text(encoding="utf-8"))
+

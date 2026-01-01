@@ -1,0 +1,7 @@
+clang build OK (tempHPをPC相対アクセスに戻した版)
+bin bytes: 344 (pad 0)
+AR lines: 43
+clang cmd:
+/usr/local/swift/usr/bin/clang -c -x assembler --target=armv5te-none-eabi -mcpu=arm946e-s -marm -o /mnt/data/anti_lag_clang_fix1/anti_lag_fix1_clang.o /mnt/data/anti_lag_clang_fix1/anti_lag_fix1_clang.s
+objcopy cmd:
+/usr/local/swift/usr/bin/llvm-objcopy -O binary /mnt/data/anti_lag_clang_fix1/anti_lag_fix1_clang.o /mnt/data/anti_lag_clang_fix1/anti_lag_fix1_clang.bin

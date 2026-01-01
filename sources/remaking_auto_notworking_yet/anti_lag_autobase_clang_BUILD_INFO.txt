@@ -1,0 +1,8 @@
+clang build OK (EU/US/JP 1.0/1.1 + KR1.0 auto base detection)
+bin bytes: 512 (pad 0)
+AR lines: 64
+
+clang cmd:
+/usr/local/swift/usr/bin/clang -c -x assembler --target=armv5te-none-eabi -mcpu=arm946e-s -marm -o /mnt/data/anti_lag_autobase_clang/anti_lag_autobase_clang.o /mnt/data/anti_lag_autobase_clang/anti_lag_autobase_clang.s
+objcopy cmd:
+/usr/local/swift/usr/bin/llvm-objcopy -O binary /mnt/data/anti_lag_autobase_clang/anti_lag_autobase_clang.o /mnt/data/anti_lag_autobase_clang/anti_lag_autobase_clang.bin

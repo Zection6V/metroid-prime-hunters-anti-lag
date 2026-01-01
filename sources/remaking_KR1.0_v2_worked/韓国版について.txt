@@ -1,0 +1,5 @@
+baseE = 0x020D33A8
+
+0x020D33A9 Player ID
+0x020D3EBA HP
+

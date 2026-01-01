@@ -1,0 +1,8 @@
+EU1.0 Base = 0x020DA558
+EU1.1 Base = 0x020DA5D8
+JP1.0 Base = 0x020DBB78
+JP1.1 Base = 0x020DBB38
+US1.0 Base = 0x020D9CB8
+US1.1 Base = 0x020DA538
+KR1.0 BASE = 0x020D33A9 KRのベースは他のバージョンに比べて0x1進んだ位置にある。相対的にHP,DD,Coilの位置を計算するときに
+minus 0x1（D33A8にもどしてから）してから0x24を引かなければいけない
