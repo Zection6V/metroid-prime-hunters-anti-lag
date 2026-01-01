@@ -11,7 +11,6 @@ Coil Strength= base + 0xE98
 EU Base = 0x020DA558
 JP Base = 0x020DBB78
 US Base = 0x020D9CB8
-KR Base = 0x020D33A9
 *******/
 
 /*********
