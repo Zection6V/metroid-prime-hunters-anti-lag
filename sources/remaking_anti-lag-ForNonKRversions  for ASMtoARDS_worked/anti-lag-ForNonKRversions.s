@@ -1,6 +1,5 @@
 /*************
 Metroid Prime Hunters Anti Lag Code
-Impementation by Dalle
 
 Addresses
 playerId = base
